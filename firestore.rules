@@ -1,0 +1,86 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // --- Entity Validations ---
+
+    function isValidUserProfile(data) {
+      return data.userId == request.auth.uid &&
+             data.fullName is string && data.fullName.size() <= 100 &&
+             data.isKycVerified is bool &&
+             (data.keys().hasAll(['userId', 'fullName', 'isKycVerified']) && data.keys().size() >= 3);
+    }
+
+    function isValidTransactionCreate(data) {
+      return data.userId == request.auth.uid &&
+             data.fromCurrency is string && data.fromCurrency.size() <= 10 &&
+             data.toCurrency is string && data.toCurrency.size() <= 10 &&
+             data.amountFrom is string && data.amountFrom.size() <= 32 &&
+             data.status is string && data.status.size() <= 20 &&
+             data.changellyId is string && data.changellyId.size() <= 64 &&
+             data.createdAt == request.time;
+    }
+
+    function isValidTransactionUpdate(data, before) {
+      return data.userId == before.userId &&
+             data.fromCurrency == before.fromCurrency &&
+             data.toCurrency == before.toCurrency &&
+             data.amountFrom == before.amountFrom &&
+             data.changellyId == before.changellyId &&
+             data.createdAt == before.createdAt &&
+             data.status is string && data.status.size() <= 20 &&
+             (!('amountTo' in data) || (data.amountTo is string && data.amountTo.size() <= 32)) &&
+             (!('payinAddress' in data) || (data.payinAddress is string && data.payinAddress.size() <= 256)) &&
+             (!('payoutHashLink' in data) || (data.payoutHashLink is string && data.payoutHashLink.size() <= 512));
+    }
+
+    // --- Match Groups ---
+
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUserProfile(incoming());
+      allow update: if isOwner(userId) && isValidUserProfile(incoming()) && (
+        // Action: Update Profile/KYC
+        incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'dateOfBirth', 'documentType', 'documentNumber', 'favoriteCoins', 'isKycVerified', 'updatedAt'])
+      );
+    }
+
+    match /users/{userId}/transactions/{transactionId} {
+      allow list: if isOwner(userId);
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidTransactionCreate(incoming());
+      allow update: if isOwner(userId) && (
+        // Terminal state locking: status
+        (existing().status != 'finished' && existing().status != 'failed') &&
+        isValidTransactionUpdate(incoming(), existing()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'amountTo', 'payinAddress', 'payoutHashLink'])
+      );
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "entities": {
+    "userProfile": {
+      "title": "User Profile",
+      "description": "Stores user KYC information and preferences.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "fullName": { "type": "string" },
+        "dateOfBirth": { "type": "string" },
+        "documentType": { "type": "string" },
+        "documentNumber": { "type": "string" },
+        "favoriteCoins": { "type": "array", "items": { "type": "string" } },
+        "isKycVerified": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "fullName", "isKycVerified"]
+    },
+    "transaction": {
+      "title": "Transaction",
+      "description": "Stores details of an exchange transaction.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "fromCurrency": { "type": "string" },
+        "toCurrency": { "type": "string" },
+        "amountFrom": { "type": "string" },
+        "amountTo": { "type": "string" },
+        "status": { "type": "string" },
+        "payoutAddress": { "type": "string" },
+        "changellyId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "payinAddress": { "type": "string" }
+      },
+      "required": ["userId", "fromCurrency", "toCurrency", "amountFrom", "status", "changellyId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "userProfile",
+      "description": "User profile and KYC document."
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": "transaction",
+      "description": "Collection of transactions for a specific user."
+    }
+  }
+}
